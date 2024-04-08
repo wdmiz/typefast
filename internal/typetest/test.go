@@ -88,6 +88,8 @@ func (t *Test) String(width int) (string, string) {
 			aux.WriteString(styles[s[letter]].Render("~"))
 		case LSOverflow:
 			aux.WriteString(styles[s[letter]].Render("#"))
+		case LSNone:
+			aux.WriteString(styles[s[letter]].Render("`"))
 		default:
 			aux.WriteString(" ")
 		}
