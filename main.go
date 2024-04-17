@@ -9,20 +9,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/wdmiz/gotypefast/internal/text"
-	"github.com/wdmiz/gotypefast/internal/typetest"
+	"github.com/wdmiz/typefast/internal/text"
+	"github.com/wdmiz/typefast/internal/typetest"
 )
 
-type model struct {
-	test        *typetest.Test
-	displayText string
-	auxText     string
-	width       int
-	timeStart   time.Time
-	running     bool
-	quitting    bool
-}
-
+// Styles
 var headerStyle lipgloss.Style = lipgloss.NewStyle().
 	Align(lipgloss.Center).
 	Foreground(lipgloss.Color("11")).
@@ -32,7 +23,32 @@ var footerStyle lipgloss.Style = lipgloss.NewStyle().
 	Align(lipgloss.Left).
 	Foreground(lipgloss.Color("8"))
 
+type model struct {
+	test      typetest.Test
+	startTime time.Time
+
+	displayText string
+	auxText     string
+
+	width int
+
+	running  bool
+	quitting bool
+}
+
+type tickMsg struct{}
+
+func tick() tea.Cmd {
+	return tea.Tick(
+		time.Millisecond*100,
+		func(_ time.Time) tea.Msg {
+			return tickMsg{}
+		},
+	)
+}
+
 func main() {
+	// Run flags
 	dictFlag := flag.String("dict", "", "Path to file containg words to generate test text from")
 	textFlag := flag.String("text", "", "Path to file containg test text")
 	wordCountFlag := flag.Int("words", 100, "Number of words in text")
@@ -49,11 +65,17 @@ func main() {
 		wordRand, err = text.NewRandomizer(*dictFlag)
 
 		if err == nil {
-			words = make([]string, *wordCountFlag)
+			wordCount := *wordCountFlag
+			if wordCount > 2<<15 {
+				wordCount = 2 << 15
+			}
+
+			words = make([]string, wordCount)
 			for w := range words {
 				words[w] = wordRand.Word()
 			}
 		}
+
 	} else {
 		err = fmt.Errorf("no text or dictionary provided")
 	}
@@ -63,18 +85,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	test := typetest.NewTest(&words)
+	test := typetest.New(words)
 
-	p := tea.NewProgram(initialModel(test), tea.WithFPS(60))
+	p := tea.NewProgram(initModel(test), tea.WithFPS(60))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Failed to run TUI: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func initialModel(t *typetest.Test) model {
-	return model{t, "", "", 0, time.Now(), false, false}
+func initModel(t typetest.Test) model {
+	return model{
+		test:      t,
+		startTime: time.Now(),
+	}
 }
+
+// Bubbletea model functions
 
 func (m model) Init() tea.Cmd {
 	return nil
@@ -104,7 +131,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !m.running {
 				m.running = true
-				m.timeStart = time.Now()
+				m.startTime = time.Now()
+				m.displayText, m.auxText = m.test.String(m.width)
+				return m, tick()
 			}
 		}
 
@@ -113,41 +142,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.displayText, m.auxText = m.test.String(m.width)
-	}
 
-	var cmd tea.Cmd
-
-	tick := func() tea.Msg {
+	case tickMsg:
 		if m.running {
-			return cmd
+			return m, tick()
 		}
-
-		return nil
 	}
 
-	return m, tick
+	return m, nil
 }
 
 func (m model) View() string {
-	var t time.Duration
-	if m.running {
-		t = time.Since(m.timeStart)
-	}
+	t := time.Since(m.startTime)
 
-	timer := fmt.Sprintf("%01d:%02d.%01d", int(t.Minutes()), int(t.Seconds())%60, (t.Milliseconds()%1000)/100)
+	stopwatch := fmt.Sprintf(
+		"%01d:%02d.%01d",
+		int(t.Minutes()),
+		int(t.Seconds())%60,
+		(t.Milliseconds()%1000)/100,
+	)
+
+	wpm := int(m.test.Stats.WPM(t))
+	wpmr := int(m.test.Stats.WPM(t))
+	acc := int(m.test.Stats.Accuracy() * 100)
 
 	if m.quitting {
 		return fmt.Sprintf("T:%s, WPM(r):%d(%d), ACC:%d%%, KS(all/ok/wrong):%d/%d/%d\n",
-			timer,
-			int(m.test.Stats.WPM(t)),
-			int(m.test.Stats.WPMRaw(t)),
-			int(m.test.Stats.Accuracy()*100),
+			stopwatch,
+			wpm,
+			wpmr,
+			acc,
 			m.test.Stats.KeystrokeCorrect+m.test.Stats.KeystrokeWrong,
 			m.test.Stats.KeystrokeCorrect,
 			m.test.Stats.KeystrokeWrong)
 	}
 
-	header := timer + " " + fmt.Sprintf("WPM: %d", int(m.test.Stats.WPM(t))) + " " + fmt.Sprintf("ACC: %d%%", int(m.test.Stats.Accuracy()*100))
+	header := fmt.Sprintf("%s WPM: %d ACC: %d%% ", stopwatch, wpm, acc)
 
 	return headerStyle.Width(m.width).Render(header) +
 		"\n" +

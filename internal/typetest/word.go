@@ -4,68 +4,69 @@ import (
 	"unicode/utf8"
 )
 
-type LetterStatus int
+type letterStatus int
 
 const (
-	LSNone LetterStatus = iota
-	LSCorrect
-	LSWrong
-	LSOverflow
-	LSCursor
+	lsNone letterStatus = iota
+	lsCorrect
+	lsWrong
+	lsOverflow
+	lsCursor
 )
 
-type Word struct {
+type word struct {
 	Letters []rune
 	Input   []rune
 	Cursor  int
 }
 
-func NewWord(word string) *Word {
-	l := utf8.RuneCountInString(word)
-	if l <= 0 {
-		return nil
+func newWord(s string) word {
+	l := utf8.RuneCountInString(s)
+
+	if l == 0 {
+		return word{nil, nil, 0}
 	}
 
 	letters := make([]rune, l)
-	progress := make([]rune, l)
+	input := make([]rune, l+3)
 
-	for i, r := range []rune(word) {
+	for i, r := range []rune(s) {
 		letters[i] = r
-		progress[i] = 0
+		input[i] = 0
 	}
 
-	return &Word{letters, progress, 0}
+	return word{letters, input, 0}
 }
 
-func (w *Word) Runes() ([]rune, []LetterStatus) {
-	length := w.Len()
+func (w *word) runes() ([]rune, []letterStatus) {
+	length := w.length()
 	runes := make([]rune, length)
-	state := make([]LetterStatus, length)
+	state := make([]letterStatus, length)
 
 	for i := range w.Letters {
 		l := w.Input[i]
 		switch l {
 		case w.Letters[i]:
 			runes[i] = l
-			state[i] = LSCorrect
+			state[i] = lsCorrect
 		case 0, ' ':
 			runes[i] = w.Letters[i]
-			state[i] = LSNone
+			state[i] = lsNone
 		default:
 			runes[i] = l
-			state[i] = LSWrong
+			state[i] = lsWrong
 		}
 	}
 
 	for i := len(w.Letters); i < length; i++ {
 		runes[i] = w.Input[i]
-		state[i] = LSOverflow
+		state[i] = lsOverflow
 	}
 
 	return runes, state
 }
 
-func (w *Word) Len() int {
+func (w *word) length() int {
 	for i := len(w.Input) - 1; i >= len(w.Letters); i-- {
 		if w.Input[i] != 0 {
 			return i + 1

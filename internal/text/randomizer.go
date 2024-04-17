@@ -34,6 +34,6 @@ func NewRandomizer(file string) (*Randomizer, error) {
 	return &Randomizer{words}, nil
 }
 
-func (g *Randomizer) Word() string {
-	return g.words[rand.Intn(len(g.words))]
+func (r *Randomizer) Word() string {
+	return r.words[rand.Intn(len(r.words))]
 }

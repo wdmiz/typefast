@@ -1,11 +1,8 @@
-module github.com/wdmiz/gotypefast
+module github.com/wdmiz/typefast
 
 go 1.21.6
 
-require (
-	github.com/charmbracelet/bubbles v0.18.0
-	github.com/charmbracelet/lipgloss v0.10.0
-)
+require github.com/charmbracelet/lipgloss v0.10.0
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
